@@ -12,14 +12,13 @@ if TOKEN is None:
     exit()
 
 # ======== إعدادات البوت ========
-ALLOWED_ROLE_NAME = "k"  # اسم الرتبة المسموح لها
-STREAM_LINK = "https://www.twitch.tv/king"  # رابط قناتك
-STREAM_NAME = "KINGS!"  # اسم البث
-
+ALLOWED_ROLE_NAME = "k"
+STREAM_LINK = "https://www.twitch.tv/king"
+STREAM_NAME = "KINGS!"
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # لازم عشان يجيب كل الأعضاء
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
@@ -31,92 +30,41 @@ def has_allowed_role(interaction: discord.Interaction) -> bool:
     return any(role.name == ALLOWED_ROLE_NAME for role in interaction.user.roles)
 
 # ============================================
-# أمر اختبار (Slash Command)
+# دالة مشتركة للإرسال
 # ============================================
-@tree.command(
-    name="test_dm",
-    description="إرسال رسالة اختبارية لك فقط (في الخاص)"
-)
-@app_commands.describe(message="النص الذي تريد إرساله (اختياري)")
-async def test_dm(interaction: discord.Interaction, message: str = None):
-    if not has_allowed_role(interaction):
-        await interaction.response.send_message(
-            f"❌ ليس لديك الصلاحية المطلوبة. تحتاج إلى رتبة `{ALLOWED_ROLE_NAME}`.",
-            ephemeral=True
-        )
-        return
-
-    await interaction.response.send_message("📨 جاري إرسال الرسالة لك في الخاص...", ephemeral=True)
-
-    if message is None:
-        await interaction.followup.send("📝 **اكتب النص الذي تريد إرساله (خلال 60 ثانية):**", ephemeral=True)
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await bot.wait_for("message", timeout=60.0, check=check)
-            message = msg.content
-        except asyncio.TimeoutError:
-            await interaction.followup.send("❌ تم الإلغاء (انتهى الوقت).", ephemeral=True)
-            return
-
-    try:
-        await interaction.user.send(message)
-        await interaction.followup.send("✅ تم إرسال الرسالة لك في الخاص.", ephemeral=True)
-    except:
-        await interaction.followup.send("❌ فشل الإرسال. تأكد من أنك تسمح بالرسائل الخاصة.", ephemeral=True)
-
-# ============================================
-# أمر الإرسال للجميع (في الخاص)
-# ============================================
-@tree.command(
-    name="send_all",
-    description="إرسال رسالة لجميع أعضاء السيرفر (في الخاص)"
-)
-@app_commands.describe(message="النص الذي تريد إرساله (اختياري)")
-async def send_all(interaction: discord.Interaction, message: str = None):
-    if not has_allowed_role(interaction):
-        await interaction.response.send_message(
-            f"❌ ليس لديك الصلاحية المطلوبة. تحتاج إلى رتبة `{ALLOWED_ROLE_NAME}`.",
-            ephemeral=True
-        )
-        return
-
+async def send_to_all(interaction: discord.Interaction, message: str, gap: str = "---"):
+    # تنسيق الرسالة مع المسافة
+    formatted_message = f"{gap}\n{message}\n{gap}"
+    
+    # إحصاء الأعضاء
     total_members = len(interaction.guild.members)
-    await interaction.response.send_message(f"📊 **عدد أعضاء السيرفر:** {total_members}", ephemeral=True)
-
-    if message is None:
-        await interaction.followup.send("📝 **اكتب النص الذي تريد إرساله للجميع (خلال 120 ثانية):**", ephemeral=True)
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await bot.wait_for("message", timeout=120.0, check=check)
-            message = msg.content
-        except asyncio.TimeoutError:
-            await interaction.followup.send("❌ تم الإلغاء (انتهى الوقت).", ephemeral=True)
-            return
-
-    preview = message[:500] + ("..." if len(message) > 500 else "")
-    await interaction.followup.send(
-        f"⚠️ **معاينة الرسالة:**\n```\n{preview}\n```\n"
-        f"📨 سيتم إرسالها لـ **{total_members}** عضو في الخاص.\n"
-        f"هل أنت متأكد؟ اكتب `confirm` خلال 30 ثانية.",
+    members_without_bots = len([m for m in interaction.guild.members if not m.bot])
+    
+    # معاينة الرسالة
+    preview = formatted_message[:500] + ("..." if len(formatted_message) > 500 else "")
+    
+    await interaction.response.send_message(
+        f"📊 **إحصاء السيرفر:**\n"
+        f"• إجمالي الأعضاء: {total_members}\n"
+        f"• الأعضاء الحقيقيون (بدون بوتات): {members_without_bots}\n\n"
+        f"📝 **معاينة الرسالة:**\n```\n{preview}\n```\n\n"
+        f"📨 سيتم إرسالها للجميع في الخاص.\n"
+        f"**اكتب `confirm` خلال 30 ثانية للتأكيد.**",
         ephemeral=True
     )
 
+    # انتظار التأكيد
     def confirm_check(m):
-        return m.author == interaction.user and m.content.lower() == "confirm"
+        return m.author == interaction.user and m.channel == interaction.channel and m.content.lower() == "confirm"
 
     try:
         await bot.wait_for("message", timeout=30.0, check=confirm_check)
     except asyncio.TimeoutError:
-        await interaction.followup.send("❌ تم الإلغاء.", ephemeral=True)
+        await interaction.followup.send("❌ تم الإلغاء (انتهى الوقت).", ephemeral=True)
         return
 
-    await interaction.followup.send(f"✅ جارٍ الإرسال إلى {total_members} عضو... قد يستغرق هذا بضع دقائق.", ephemeral=True)
+    # بدء الإرسال
+    await interaction.followup.send(f"✅ جارٍ الإرسال إلى {members_without_bots} عضو في الخاص...", ephemeral=True)
 
     success = 0
     failed = 0
@@ -126,75 +74,73 @@ async def send_all(interaction: discord.Interaction, message: str = None):
             continue
 
         try:
-            await member.send(message)
+            await member.send(formatted_message)
             success += 1
-            await asyncio.sleep(0.5)  # تفادي حظر السرعة
+            await asyncio.sleep(0.5)
         except:
             failed += 1
 
         if (success + failed) % 50 == 0:
-            print(f"[*] تقدم: {success + failed}/{total_members}")
+            print(f"[*] تقدم: {success + failed}/{members_without_bots}")
 
+    # النتيجة النهائية
     await interaction.followup.send(
         f"✅ **تم الانتهاء!**\n"
-        f"✅ نجح: {success}\n"
-        f"❌ فشل: {failed}\n"
-        f"📊 المجموع: {total_members}",
+        f"✅ نجح الإرسال: {success}\n"
+        f"❌ فشل الإرسال: {failed}\n"
+        f"📊 المجموع: {members_without_bots}",
         ephemeral=True
     )
 
 # ============================================
-# أمر الإرسال في قناة (مع منشن)
+# الأمر test
 # ============================================
 @tree.command(
-    name="send_channel",
-    description="إرسال رسالة في قناة معينة مع منشن للجميع"
+    name="test",
+    description="إرسال رسالة لجميع أعضاء السيرفر في الخاص مع مسافة وإحصاء"
 )
 @app_commands.describe(
-    channel="القناة المراد الإرسال فيها",
-    message="النص الذي تريد إرساله"
+    message="النص الذي تريد إرساله",
+    gap="المسافة (الإشارة) مثلاً: --- أو === (اختياري)"
 )
-async def send_channel(
-    interaction: discord.Interaction,
-    channel: discord.TextChannel,
-    message: str
-):
+async def test(interaction: discord.Interaction, message: str, gap: str = "---"):
     if not has_allowed_role(interaction):
         await interaction.response.send_message(
-            f"❌ ليس لديك الصلاحية المطلوبة. تحتاج إلى رتبة `{ALLOWED_ROLE_NAME}`.",
+            f"❌ ليس لديك الصلاحية. تحتاج إلى رتبة `{ALLOWED_ROLE_NAME}`.",
             ephemeral=True
         )
         return
-
-    # تأكيد قبل الإرسال
-    await interaction.response.send_message(
-        f"⚠️ هل أنت متأكد من إرسال هذه الرسالة في قناة #{channel.name}؟\n"
-        f"```\n{message[:500]}...\n```\n"
-        f"اكتب `confirm` خلال 30 ثانية.",
-        ephemeral=True
-    )
-
-    def confirm_check(m):
-        return m.author == interaction.user and m.content.lower() == "confirm"
-
-    try:
-        await bot.wait_for("message", timeout=30.0, check=confirm_check)
-    except asyncio.TimeoutError:
-        await interaction.followup.send("❌ تم الإلغاء.", ephemeral=True)
-        return
-
-    # إرسال الرسالة في القناة مع منشن
-    await channel.send(f"@everyone\n\n{message}")
-    await interaction.followup.send(f"✅ تم إرسال الرسالة في قناة #{channel.name}!", ephemeral=True)
+    
+    await send_to_all(interaction, message, gap)
 
 # ============================================
-# تشغيل البوت مع حالة Streaming بنفسجية
+# الأمر all
+# ============================================
+@tree.command(
+    name="all",
+    description="إرسال رسالة لجميع أعضاء السيرفر في الخاص مع مسافة وإحصاء"
+)
+@app_commands.describe(
+    message="النص الذي تريد إرساله",
+    gap="المسافة (الإشارة) مثلاً: --- أو === (اختياري)"
+)
+async def all_command(interaction: discord.Interaction, message: str, gap: str = "---"):
+    if not has_allowed_role(interaction):
+        await interaction.response.send_message(
+            f"❌ ليس لديك الصلاحية. تحتاج إلى رتبة `{ALLOWED_ROLE_NAME}`.",
+            ephemeral=True
+        )
+        return
+    
+    await send_to_all(interaction, message, gap)
+
+# ============================================
+# تشغيل البوت
 # ============================================
 @bot.event
 async def on_ready():
     await tree.sync()
     
-    # تعيين حالة البوت إلى Streaming (بنفسجي)
     await bot.change_presence(
         activity=discord.Streaming(
             name=STREAM_NAME,
@@ -206,7 +152,4 @@ async def on_ready():
     print(f"[+] Slash commands synced!")
     print(f"[+] Streaming: {STREAM_NAME} -> {STREAM_LINK}")
 
-# ============================================
-# تشغيل البوت
-# ============================================
 bot.run(TOKEN)
